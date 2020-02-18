@@ -9,4 +9,14 @@ IFS=$'\n\t'
 # readonly script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # cd "${script_dir}"
 
-http POST http://localhost:5000/api/items content='a thing'
+origin='http://localhost:5000'
+
+http POST "$origin/api/items" content='a thing'
+
+http GET "$origin/api/items/2"
+
+http PATCH "$origin/api/items/2" content='a new thing'
+
+http DELETE "$origin/api/items/2"
+
+http GET "$origin/api/items"
