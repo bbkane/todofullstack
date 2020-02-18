@@ -6,11 +6,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # https://stackoverflow.com/a/246128/295807
-readonly script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "${script_dir}"
+# readonly script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# cd "${script_dir}"
 
-source venv/bin/activate
-
-export FLASK_APP=server.py
-export FLASK_ENV=development
-python -m flask run
+http POST http://localhost:5000/api/items content='a thing'
