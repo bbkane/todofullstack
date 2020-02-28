@@ -11,12 +11,17 @@ IFS=$'\n\t'
 
 origin='http://localhost:5000'
 
-http POST "$origin/api/items" content='a thing'
+cat > ./tasks.txt << 'EOF'
+first task
+second thingie
+EOF
 
-http GET "$origin/api/items/2"
+http --check-status POST "$origin/api/items" content='a thing'
 
-http PATCH "$origin/api/items/2" content='a new thing'
+http --check-status GET "$origin/api/items/2"
 
-http DELETE "$origin/api/items/2"
+http --check-status PATCH "$origin/api/items/2" content='a new thing'
 
-http GET "$origin/api/items"
+http --check-status DELETE "$origin/api/items/2"
+
+http --check-status GET "$origin/api/items"

@@ -11,13 +11,16 @@ from flask import Flask, redirect, url_for, jsonify, request
 # Global state yay!!
 app = Flask(__name__)
 g_state = {'tasks': []}
-with app.open_resource('tasks.txt', mode='r') as fp:
-    i = 0
-    for line in fp:
-        # line = line.decode('utf-8')
-        line = line.strip()
-        if line:
-            g_state['tasks'].append({'id': i, 'content': line})
+try:
+    with app.open_resource('tasks.txt', mode='r') as fp:
+        i = 0
+        for line in fp:
+            # line = line.decode('utf-8')
+            line = line.strip()
+            if line:
+                g_state['tasks'].append({'id': i, 'content': line})
+except FileNotFoundError:
+    print('No tasks.txt to load')
 
 
 @app.route('/')
