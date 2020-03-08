@@ -16,6 +16,8 @@ first task
 second thingie
 EOF
 
+set -x
+
 http --check-status POST "$origin/api/items" content='a thing'
 
 http --check-status GET "$origin/api/items/2"
@@ -25,3 +27,5 @@ http --check-status PATCH "$origin/api/items/2" content='a new thing'
 http --check-status DELETE "$origin/api/items/2"
 
 http --check-status GET "$origin/api/items"
+
+set +x
