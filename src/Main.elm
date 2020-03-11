@@ -114,7 +114,7 @@ type Msg
     | PushedEdit Index
     | PushedSaveEdit Id String
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
-    | GotDeletedTodo (Result (Http.Detailed.Error Bytes.Bytes) ())
+    | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
     | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
     | GotTodos (Result (Http.Detailed.Error String) ( Http.Metadata, List Todo ))
 
@@ -150,7 +150,7 @@ update msg model =
                 Err err ->
                     ( { model | lastError = Just err }, Cmd.none )
 
-        GotDeletedTodo result ->
+        GotDeletedTodo id result ->
             -- TODO: Actually delete from stored array
             case result of
                 Ok _ ->
@@ -164,6 +164,7 @@ update msg model =
                             Bytes.Decode.unsignedInt32 Bytes.BE
                                 |> Bytes.Decode.andThen Bytes.Decode.string
 
+                        -- TODO: put in own function
                         newError : Maybe (Http.Detailed.Error String)
                         newError =
                             case err of
@@ -260,7 +261,7 @@ update msg model =
                 , headers = []
                 , url = origin ++ "/api/items/" ++ String.fromInt id
                 , body = Http.emptyBody
-                , expect = Http.Detailed.expectWhatever GotDeletedTodo
+                , expect = Http.Detailed.expectWhatever (GotDeletedTodo id)
                 , timeout = Nothing
                 , tracker = Nothing
                 }
