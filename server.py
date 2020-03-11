@@ -48,7 +48,7 @@ def root():
 # {
 #   "text": "bob wuz here"
 # }
-@app.route('/api/items', methods=['GET', 'POST'])
+@app.route('/api/items', methods=['GET', 'POST', 'OPTIONS'])
 def items():
     if request.method == 'GET':
         return jsonify(g_state)
@@ -58,6 +58,8 @@ def items():
         new_item = {'id': len(g_state['todos']), 'text': text}
         g_state['todos'].append(new_item)
         return jsonify(new_item)
+    elif request.method == 'OPTIONS':
+        return '', 200
     else:
         raise ValueError(f"Invalid method {request.method}")
 
@@ -80,6 +82,8 @@ def item(task_id):
     elif request.method == 'DELETE':
         del g_state['todos'][task_id]
         return '', 204
+    elif request.method == 'OPTIONS':
+        return '', 200
     else:
         raise ValueError(f"Invalid method {request.method}")
 

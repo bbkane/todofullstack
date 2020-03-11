@@ -44,6 +44,7 @@ DELETE /api/items/1 -- delete
 ## TODO Data Structure
 
 https://github.com/evancz/elm-todomvc/blob/master/src/Main.elm
+
 https://github.com/bbkane/todo-list/blob/master/src/Main.elm
 
 For the list of items I need a data structure that can:
@@ -83,4 +84,6 @@ node :
     -> Html msg
 
 https://guide.elm-lang.org/optimization/keyed.html
+
+Also see https://package.elm-lang.org/packages/FabienHenon/elm-infinite-list-view/latest/ for :q
 
