@@ -58,6 +58,7 @@ type alias Model =
 
     -- Puttung the last error as a field. If there's a network error I still want
     -- to see the last version of the list (so don't put this as a Result in todos)
+    -- TODO: make this a Maybe String so I can put all errors here to display to the user
     , lastError : Maybe (Http.Detailed.Error String)
     , todos : Array.Array Todo
     }
@@ -85,20 +86,15 @@ findIndex predicate array =
 
 findIndexHelper : Index -> (a -> Bool) -> Array.Array a -> Maybe Index
 findIndexHelper index predicate array =
-    if Array.isEmpty array then
-        Nothing
-
-    else
-        case Array.get index array of
-            Nothing ->
-                Nothing
-
-            Just item ->
+    Array.get index array
+        |> Maybe.andThen
+            (\item ->
                 if predicate item then
                     Just index
 
                 else
                     findIndexHelper (index + 1) predicate array
+            )
 
 
 
