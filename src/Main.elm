@@ -77,6 +77,24 @@ init _ =
     )
 
 
+
+-- UPDATE
+
+
+type Msg
+    = ChangedNextText String
+    | ChangedTodo Index String
+    | PushedAddButton String
+    | PushedCancelEdit Index
+    | PushedDeleteTodo Id
+    | PushedEdit Index
+    | PushedSaveEdit Id String
+    | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
+    | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
+    | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
+    | GotTodos (Result (Http.Detailed.Error String) ( Http.Metadata, List Todo ))
+
+
 {-| for item in array: if test(item): return Just index of item else Nothing
 -}
 findIndex : (a -> Bool) -> Array.Array a -> Maybe Index
@@ -97,22 +115,55 @@ findIndexHelper index predicate array =
             )
 
 
+{-| change item in array if it's not Nothing. return Array
+-}
+maybeSet : Index -> Maybe a -> Array.Array a -> Array.Array a
+maybeSet index maybeItem array =
+    case maybeItem of
+        Just item ->
+            Array.set index item array
 
--- UPDATE
+        Nothing ->
+            array
 
 
-type Msg
-    = ChangedNextText String
-    | ChangedTodo Index String
-    | PushedAddButton String
-    | PushedCancelEdit Index
-    | PushedDeleteTodo Id
-    | PushedEdit Index
-    | PushedSaveEdit Id String
-    | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
-    | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
-    | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
-    | GotTodos (Result (Http.Detailed.Error String) ( Http.Metadata, List Todo ))
+sizedString : Bytes.Decode.Decoder String
+sizedString =
+    Bytes.Decode.unsignedInt32 Bytes.BE
+        |> Bytes.Decode.andThen Bytes.Decode.string
+
+
+toHttpDetailedErrorString : Http.Detailed.Error Bytes.Bytes -> Maybe (Http.Detailed.Error String)
+toHttpDetailedErrorString err =
+    case err of
+        Http.Detailed.BadUrl s ->
+            Just <| Http.Detailed.BadUrl s
+
+        Http.Detailed.Timeout ->
+            Just Http.Detailed.Timeout
+
+        Http.Detailed.NetworkError ->
+            Just Http.Detailed.NetworkError
+
+        Http.Detailed.BadStatus metadata bodyBytes ->
+            let
+                errStr =
+                    Maybe.withDefault
+                        "Could not decode bytes"
+                        -- TODO: wish I knew how to decode bytes here
+                        (Bytes.Decode.decode sizedString bodyBytes)
+            in
+            Just <| Http.Detailed.BadStatus metadata errStr
+
+        Http.Detailed.BadBody metadata bodyBytes str ->
+            let
+                errStr =
+                    Maybe.withDefault
+                        "Could not decode bytes"
+                        -- TODO: wish I knew how to decode bytes here
+                        (Bytes.Decode.decode sizedString bodyBytes)
+            in
+            Just <| Http.Detailed.BadBody metadata errStr str
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -122,21 +173,15 @@ update msg model =
             ( { model | nextText = t }, Cmd.none )
 
         ChangedTodo index newEditText ->
-            let
-                todoMaybe =
-                    Array.get index model.todos
-            in
-            case todoMaybe of
-                Nothing ->
-                    ( model, Cmd.none )
-
-                Just todo ->
-                    ( { model
-                        | todos =
-                            Array.set index { todo | editText = newEditText } model.todos
-                      }
-                    , Cmd.none
-                    )
+            ( { model
+                | todos =
+                    maybeSet
+                        index
+                        (Maybe.map (\t -> { t | editText = newEditText }) (Array.get index model.todos))
+                        model.todos
+              }
+            , Cmd.none
+            )
 
         GotAddedNextText result ->
             case result of
@@ -153,47 +198,7 @@ update msg model =
                     ( model, Cmd.none )
 
                 Err err ->
-                    -- Convert to string :)
-                    let
-                        sizedString : Bytes.Decode.Decoder String
-                        sizedString =
-                            Bytes.Decode.unsignedInt32 Bytes.BE
-                                |> Bytes.Decode.andThen Bytes.Decode.string
-
-                        -- TODO: put in own function
-                        newError : Maybe (Http.Detailed.Error String)
-                        newError =
-                            case err of
-                                Http.Detailed.BadUrl s ->
-                                    Just <| Http.Detailed.BadUrl s
-
-                                Http.Detailed.Timeout ->
-                                    Just Http.Detailed.Timeout
-
-                                Http.Detailed.NetworkError ->
-                                    Just Http.Detailed.NetworkError
-
-                                Http.Detailed.BadStatus metadata bodyBytes ->
-                                    let
-                                        errStr =
-                                            Maybe.withDefault
-                                                "Could not decode bytes"
-                                                -- TODO: wish I knew how to decode bytes here
-                                                (Bytes.Decode.decode sizedString bodyBytes)
-                                    in
-                                    Just <| Http.Detailed.BadStatus metadata errStr
-
-                                Http.Detailed.BadBody metadata bodyBytes str ->
-                                    let
-                                        errStr =
-                                            Maybe.withDefault
-                                                "Could not decode bytes"
-                                                -- TODO: wish I knew how to decode bytes here
-                                                (Bytes.Decode.decode sizedString bodyBytes)
-                                    in
-                                    Just <| Http.Detailed.BadBody metadata errStr str
-                    in
-                    ( { model | lastError = newError }, Cmd.none )
+                    ( { model | lastError = toHttpDetailedErrorString err }, Cmd.none )
 
         GotTodos result ->
             case result of
@@ -234,21 +239,15 @@ update msg model =
             )
 
         PushedCancelEdit index ->
-            let
-                todoMaybe =
-                    Array.get index model.todos
-            in
-            case todoMaybe of
-                Nothing ->
-                    ( model, Cmd.none )
-
-                Just todo ->
-                    ( { model
-                        | todos =
-                            Array.set index { todo | isEditing = False, editText = "" } model.todos
-                      }
-                    , Cmd.none
-                    )
+            ( { model
+                | todos =
+                    maybeSet
+                        index
+                        (Maybe.map (\t -> { t | isEditing = False }) (Array.get index model.todos))
+                        model.todos
+              }
+            , Cmd.none
+            )
 
         PushedDeleteTodo id ->
             ( model
@@ -264,20 +263,15 @@ update msg model =
             )
 
         PushedEdit index ->
-            let
-                todoMaybe =
-                    Array.get index model.todos
-            in
-            case todoMaybe of
-                Nothing ->
-                    ( model, Cmd.none )
-
-                Just todo ->
-                    ( { model
-                        | todos = Array.set index { todo | isEditing = True, editText = todo.text } model.todos
-                      }
-                    , Cmd.none
-                    )
+            ( { model
+                | todos =
+                    maybeSet
+                        index
+                        (Maybe.map (\t -> { t | isEditing = True, editText = t.text }) (Array.get index model.todos))
+                        model.todos
+              }
+            , Cmd.none
+            )
 
         PushedSaveEdit id newText ->
             ( model
