@@ -9,7 +9,8 @@ Run with ` npx elm-live src/Main.elm --open -- --debug`
 
 # TODO
 
-make it show stuff - I think I need to account for PATCH in the server? see network reqeusts from elm app
+let model.lastError = Maybe String <- the only thing I'm going to do with it is show it to the user
+
 Use a html.lazy div to hold the list of items. Use id + editstring as key for html.key. Something like:
 
 ```

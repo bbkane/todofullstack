@@ -192,10 +192,11 @@ update msg model =
                     ( { model | lastError = Just err }, Cmd.none )
 
         GotDeletedTodo id result ->
-            -- TODO: Actually delete from stored array
             case result of
                 Ok _ ->
-                    ( model, Cmd.none )
+                    ( { model | todos = Array.filter (\t -> t.id /= id) model.todos }
+                    , Cmd.none
+                    )
 
                 Err err ->
                     ( { model | lastError = toHttpDetailedErrorString err }, Cmd.none )
