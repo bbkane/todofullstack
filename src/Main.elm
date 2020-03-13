@@ -7,6 +7,8 @@ import Bytes.Decode
 import Html as H
 import Html.Attributes as Ha
 import Html.Events as He
+import Html.Keyed as Hk
+import Html.Lazy as Hl
 import Http
 import Http.Detailed
 import Json.Decode as Jd
@@ -56,7 +58,7 @@ type alias Todo =
 type alias Model =
     { nextText : String
 
-    -- Puttung the last error as a field. If there's a network error I still want
+    -- Putting the last error as a field. If there's a network error I still want
     -- to see the last version of the list (so don't put this as a Result in todos)
     -- TODO: make this a Maybe String so I can put all errors here to display to the user
     , lastError : Maybe (Http.Detailed.Error String)
@@ -212,11 +214,7 @@ update msg model =
         GotSavedEdit result ->
             case result of
                 Ok ( _, todo ) ->
-                    let
-                        maybeIndex =
-                            findIndex (\i -> i.id == todo.id) model.todos
-                    in
-                    case maybeIndex of
+                    case findIndex (\i -> i.id == todo.id) model.todos of
                         Just index ->
                             ( { model | todos = Array.set index todo model.todos }, Cmd.none )
 
@@ -226,6 +224,20 @@ update msg model =
                 Err err ->
                     ( { model | lastError = Just err }, Cmd.none )
 
+        -- GotSavedEdit result ->
+        --     case result of
+        --         Ok ( _, todo ) ->
+        --             let
+        --                 maybeIndex =
+        --                     findIndex (\i -> i.id == todo.id) model.todos
+        --             in
+        --             case maybeIndex of
+        --                 Just index ->
+        --                     ( { model | todos = Array.set index todo model.todos }, Cmd.none )
+        --                 Nothing ->
+        --                     ( model, Cmd.none )
+        --         Err err ->
+        --             ( { model | lastError = Just err }, Cmd.none )
         PushedAddButton t ->
             ( { model | nextText = "" }
             , Http.request
@@ -300,7 +312,7 @@ view model =
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
-        , viewTodos model.todos
+        , Hl.lazy viewTodos model.todos
         ]
 
 
@@ -312,6 +324,42 @@ viewLastError maybeErr =
 
         Just err ->
             H.text (httpDetailedErrorToStr err)
+
+
+viewTodos : Array.Array Todo -> H.Html Msg
+viewTodos todos =
+    -- H.ul [] (List.map viewTodo (Array.toIndexedList todos))
+    Hk.node "ul" [] (List.map viewKeyedTodo (Array.toIndexedList todos))
+
+
+viewKeyedTodo : ( Index, Todo ) -> ( String, H.Html Msg )
+viewKeyedTodo ( index, todo ) =
+    -- ( String.fromInt todo.id ++ todo.editText, viewTodo ( index, todo ) )
+    -- ( String.fromInt todo.id, viewTodo ( index, todo ) )
+    -- TODO: why is this working?
+    -- https://guide.elm-lang.org/optimization/keyed.html
+    ( "key", viewTodo ( index, todo ) )
+
+
+
+-- TODO: why is this working?
+
+
+viewTodo : ( Index, Todo ) -> H.Html Msg
+viewTodo ( index, todo ) =
+    if todo.isEditing then
+        H.li []
+            [ H.button [ He.onClick (PushedCancelEdit index) ] [ H.text "Cancel Edit" ]
+            , H.input [ Ha.placeholder "buy avacodos", Ha.value todo.editText, He.onInput (ChangedTodo index) ] []
+            , H.button [ He.onClick (PushedSaveEdit todo.id todo.editText) ] [ H.text "Save edit" ]
+            ]
+
+    else
+        H.li []
+            [ H.button [ He.onClick (PushedDeleteTodo todo.id) ] [ H.text "Delete" ]
+            , H.text todo.text
+            , H.button [ He.onClick (PushedEdit index) ] [ H.text "Edit" ]
+            ]
 
 
 httpDetailedErrorToStr : Http.Detailed.Error String -> String
@@ -335,29 +383,6 @@ httpDetailedErrorToStr err =
 
         Http.Detailed.BadBody metadata body str ->
             start ++ "BadBody: " ++ metadata.statusText ++ " : " ++ body ++ " : " ++ str
-
-
-viewTodos : Array.Array Todo -> H.Html Msg
-viewTodos todos =
-    -- H.ul [] (Array.toIndexedList (Array.map (\t -> viewTodo t) todos))
-    H.ul [] (List.map (\li -> viewTodo li) (Array.toIndexedList todos))
-
-
-viewTodo : ( Int, Todo ) -> H.Html Msg
-viewTodo ( index, todo ) =
-    if todo.isEditing then
-        H.li []
-            [ H.button [ He.onClick (PushedCancelEdit index) ] [ H.text "Cancel Edit" ]
-            , H.input [ Ha.placeholder "buy avacodos", Ha.value todo.editText, He.onInput (ChangedTodo index) ] []
-            , H.button [ He.onClick (PushedSaveEdit todo.id todo.editText) ] [ H.text "Save edit" ]
-            ]
-
-    else
-        H.li []
-            [ H.button [ He.onClick (PushedDeleteTodo todo.id) ] [ H.text "Delete" ]
-            , H.text todo.text
-            , H.button [ He.onClick (PushedEdit index) ] [ H.text "Edit" ]
-            ]
 
 
 

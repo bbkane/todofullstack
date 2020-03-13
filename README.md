@@ -11,6 +11,8 @@ Run with ` npx elm-live src/Main.elm --open -- --debug`
 
 let model.lastError = Maybe String <- the only thing I'm going to do with it is show it to the user
 
+TODO: I've got keyed in there and it seems to be working, but it should be broken??? What is wrong???
+
 Use a html.lazy div to hold the list of items. Use id + editstring as key for html.key. Something like:
 
 ```
