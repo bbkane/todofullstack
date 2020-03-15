@@ -262,13 +262,11 @@ viewLastError maybeErrStr =
 viewTodos : Array.Array Todo -> H.Html Msg
 viewTodos todos =
     -- H.ul [] (List.map viewTodo (Array.toIndexedList todos))
-    Hk.node "ul" [] (List.map viewKeyedTodo (Array.toIndexedList todos))
+    Hk.ul [] (List.map viewKeyedTodo (Array.toIndexedList todos))
 
 
 viewKeyedTodo : ( Index, Todo ) -> ( String, H.Html Msg )
 viewKeyedTodo ( index, todo ) =
-    -- ( String.fromInt todo.id ++ todo.editText, viewTodo ( index, todo ) )
-    -- ( String.fromInt todo.id, viewTodo ( index, todo ) )
     -- TODO: why is this working?
     -- https://guide.elm-lang.org/optimization/keyed.html
     ( "key", viewTodo ( index, todo ) )

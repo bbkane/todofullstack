@@ -1,27 +1,14 @@
 This is to to see how to handle html.keyed with a server app
 
-Focuses: Elm with lots of HTTP interactions
-VDOM optimizing with Html.Keyed and HTML.lazy
-Need to load items from file on startup too (for debugging)
-Gonna use it for taggedmarks
+- Elm with lots of HTTP interactions
+- VDOM optimizing with Html.Keyed and HTML.lazy
+- Need to load lots of items on startup from a file so I can see how sluggish the frontend can get
 
 Run with ` npx elm-live src/Main.elm --open -- --debug`
 
 # TODO
 
-let model.lastError = Maybe String <- the only thing I'm going to do with it is show it to the user
-
-TODO: I've got keyed in there and it seems to be working, but it should be broken??? What is wrong???
-
-Use a html.lazy div to hold the list of items. Use id + editstring as key for html.key. Something like:
-
-```
-viewTodos =
-    Html.lazy div [] (Html.keyed (list.map (.id ++ .editSText) todos)) todos)
-```
-
-viewTodo = if editString show editStringAndButton else show prod+EditButton
-
+I've got keyed in there and it seems to be working, but it should be broken??? What is wrong???
 
 ## API
 
@@ -44,7 +31,7 @@ PATCH /api/items/1 -- update item
 
 DELETE /api/items/1 -- delete
 
-## TODO Data Structure
+## Data Structure for list
 
 https://github.com/evancz/elm-todomvc/blob/master/src/Main.elm
 
@@ -57,36 +44,15 @@ For the list of items I need a data structure that can:
 - edit from middle
 - remain sorted in insortion order
 
-Array - append, no delete (can with filter), can edit, can remain sorted
-Dict - append, delete, no remain sorted (can with separate list of sorted ids)
-List - append, no delete (can with filter - TODOMVC does this), remain sorted
-Set - append, delete, edit?, no remain sorted, doesn't work with non-primitive types (wtf?)
+- Array - append, no delete (can with filter), can edit, can remain sorted
+- Dict - append, delete, no remain sorted (can with separate list of sorted ids)
+- List - append, no delete (can with filter - TODOMVC does this), remain sorted
+- Set - append, delete, edit?, no remain sorted, doesn't work with non-primitive types (wtf?)
 
+## Links
 
-## Model
-
-
-
-Item : {id : int, editText: String, text: Sring}
-
-{
-    nextItem : String
-    -- I do need ordering
-    -- items : id : Dict (id: String -> Item
-
-    -- items : id : List Item
-}
-
-https://guide.elm-lang.org/optimization/keyed.html
-
-https://package.elm-lang.org/packages/elm/html/latest/Html-Keyed
-node :
-    String
-    -> List (Attribute msg)
-    -> List ( String, Html msg )
-    -> Html msg
-
-https://guide.elm-lang.org/optimization/keyed.html
-
-Also see https://package.elm-lang.org/packages/FabienHenon/elm-infinite-list-view/latest/ for :q
+- https://guide.elm-lang.org/optimization/keyed.html
+- https://package.elm-lang.org/packages/elm/html/latest/Html-Keyed
+- https://guide.elm-lang.org/optimization/keyed.html
+- https://package.elm-lang.org/packages/FabienHenon/elm-infinite-list-view/latest/
 
