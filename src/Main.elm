@@ -117,18 +117,6 @@ findIndexHelper index predicate array =
             )
 
 
-{-| change item in array if it's not Nothing. return Array
--}
-maybeSet : Index -> Maybe a -> Array.Array a -> Array.Array a
-maybeSet index maybeItem array =
-    case maybeItem of
-        Just item ->
-            Array.set index item array
-
-        Nothing ->
-            array
-
-
 sizedString : Bytes.Decode.Decoder String
 sizedString =
     Bytes.Decode.unsignedInt32 Bytes.BE
@@ -175,15 +163,12 @@ update msg model =
             ( { model | nextText = t }, Cmd.none )
 
         ChangedTodo index newEditText ->
-            ( { model
-                | todos =
-                    maybeSet
-                        index
-                        (Maybe.map (\t -> { t | editText = newEditText }) (Array.get index model.todos))
-                        model.todos
-              }
-            , Cmd.none
-            )
+            case Array.get index model.todos of
+                Just todo ->
+                    ( { model | todos = Array.set index { todo | editText = newEditText } model.todos }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         GotAddedNextText result ->
             case result of
@@ -224,20 +209,6 @@ update msg model =
                 Err err ->
                     ( { model | lastError = Just err }, Cmd.none )
 
-        -- GotSavedEdit result ->
-        --     case result of
-        --         Ok ( _, todo ) ->
-        --             let
-        --                 maybeIndex =
-        --                     findIndex (\i -> i.id == todo.id) model.todos
-        --             in
-        --             case maybeIndex of
-        --                 Just index ->
-        --                     ( { model | todos = Array.set index todo model.todos }, Cmd.none )
-        --                 Nothing ->
-        --                     ( model, Cmd.none )
-        --         Err err ->
-        --             ( { model | lastError = Just err }, Cmd.none )
         PushedAddButton t ->
             ( { model | nextText = "" }
             , Http.request
@@ -252,15 +223,14 @@ update msg model =
             )
 
         PushedCancelEdit index ->
-            ( { model
-                | todos =
-                    maybeSet
-                        index
-                        (Maybe.map (\t -> { t | isEditing = False }) (Array.get index model.todos))
-                        model.todos
-              }
-            , Cmd.none
-            )
+            case Array.get index model.todos of
+                Just todo ->
+                    ( { model | todos = Array.set index { todo | isEditing = False } model.todos }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         PushedDeleteTodo id ->
             ( model
@@ -276,15 +246,20 @@ update msg model =
             )
 
         PushedEdit index ->
-            ( { model
-                | todos =
-                    maybeSet
-                        index
-                        (Maybe.map (\t -> { t | isEditing = True, editText = t.text }) (Array.get index model.todos))
-                        model.todos
-              }
-            , Cmd.none
-            )
+            case Array.get index model.todos of
+                Just todo ->
+                    ( { model
+                        | todos =
+                            Array.set
+                                index
+                                { todo | isEditing = True, editText = todo.text }
+                                model.todos
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         PushedSaveEdit id newText ->
             ( model
