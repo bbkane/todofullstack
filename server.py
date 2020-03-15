@@ -12,7 +12,7 @@ from flask import Flask, redirect, url_for, jsonify, request
 app = Flask(__name__)
 g_state = {'todos': []}
 try:
-    with app.open_resource('tasks.txt', mode='r') as fp:
+    with app.open_resource("tasks.txt", mode='r') as fp:
         i = 0
         for line in fp:
             # line = line.decode('utf-8')

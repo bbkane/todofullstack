@@ -40,10 +40,15 @@ origin =
     "http://localhost:5000"
 
 
+{-| Local position of todo in todos
+-}
 type alias Index =
     Int
 
 
+{-| opaque id from server for a todo.
+each todo has a unique id
+-}
 type alias Id =
     Int
 
@@ -261,7 +266,6 @@ viewLastError maybeErrStr =
 
 viewTodos : Array.Array Todo -> H.Html Msg
 viewTodos todos =
-    -- H.ul [] (List.map viewTodo (Array.toIndexedList todos))
     Hk.ul [] (List.map viewKeyedTodo (Array.toIndexedList todos))
 
 
@@ -269,7 +273,9 @@ viewKeyedTodo : ( Index, Todo ) -> ( String, H.Html Msg )
 viewKeyedTodo ( index, todo ) =
     -- TODO: why is this working?
     -- https://guide.elm-lang.org/optimization/keyed.html
-    ( "key", viewTodo ( index, todo ) )
+    -- I'm assuming that if it finds duplicate keys it falls back to comparing equality
+    -- ( "key", viewTodo ( index, todo ) )
+    ( String.fromInt todo.id, viewTodo ( index, todo ) )
 
 
 viewTodo : ( Index, Todo ) -> H.Html Msg
