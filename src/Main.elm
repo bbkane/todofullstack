@@ -21,6 +21,7 @@ import Maybe
 -- MAIN
 
 
+main : Program () Model Msg
 main =
     Browser.element
         { init = init
@@ -82,11 +83,11 @@ init _ =
 type Msg
     = ChangedNextText String
     | ChangedTodo Index String
-    | PushedAddButton String
-    | PushedCancelEdit Index
-    | PushedDeleteTodo Id
-    | PushedEdit Index
-    | PushedSaveEdit Id String
+    | PressedAdd String
+    | PressedCancelEdit Index
+    | PressedDelete Id
+    | PressedEdit Index
+    | PressedSaveEdit Id String
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
     | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
     | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
@@ -111,12 +112,6 @@ findIndexHelper index predicate array =
                 else
                     findIndexHelper (index + 1) predicate array
             )
-
-
-sizedString : Bytes.Decode.Decoder String
-sizedString =
-    Bytes.Decode.unsignedInt32 Bytes.BE
-        |> Bytes.Decode.andThen Bytes.Decode.string
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -172,7 +167,7 @@ update msg model =
                 Err err ->
                     ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
-        PushedAddButton t ->
+        PressedAdd t ->
             ( { model | nextText = "" }
             , Http.request
                 { method = "POST"
@@ -185,7 +180,7 @@ update msg model =
                 }
             )
 
-        PushedCancelEdit index ->
+        PressedCancelEdit index ->
             case Array.get index model.todos of
                 Just todo ->
                     ( { model | todos = Array.set index { todo | isEditing = False } model.todos }
@@ -195,7 +190,7 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        PushedDeleteTodo id ->
+        PressedDelete id ->
             ( model
             , Http.request
                 { method = "DELETE"
@@ -208,7 +203,7 @@ update msg model =
                 }
             )
 
-        PushedEdit index ->
+        PressedEdit index ->
             case Array.get index model.todos of
                 Just todo ->
                     ( { model
@@ -224,7 +219,7 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        PushedSaveEdit id newText ->
+        PressedSaveEdit id newText ->
             ( model
             , Http.request
                 { method = "PATCH"
@@ -246,7 +241,7 @@ view : Model -> H.Html Msg
 view model =
     H.div []
         [ H.input [ Ha.placeholder "buy avacodos", Ha.value model.nextText, He.onInput ChangedNextText ] []
-        , H.button [ He.onClick (PushedAddButton model.nextText) ] [ H.text "Add" ]
+        , H.button [ He.onClick (PressedAdd model.nextText) ] [ H.text "Add" ]
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
@@ -258,7 +253,7 @@ viewLastError : Maybe String -> H.Html Msg
 viewLastError maybeErrStr =
     case maybeErrStr of
         Nothing ->
-            H.text "No HTTP errors found :)"
+            H.text "No errors found :)"
 
         Just err ->
             H.text err
@@ -283,17 +278,23 @@ viewTodo : ( Index, Todo ) -> H.Html Msg
 viewTodo ( index, todo ) =
     if todo.isEditing then
         H.li []
-            [ H.button [ He.onClick (PushedCancelEdit index) ] [ H.text "Cancel Edit" ]
+            [ H.button [ He.onClick (PressedCancelEdit index) ] [ H.text "Cancel Edit" ]
             , H.input [ Ha.placeholder "buy avacodos", Ha.value todo.editText, He.onInput (ChangedTodo index) ] []
-            , H.button [ He.onClick (PushedSaveEdit todo.id todo.editText) ] [ H.text "Save edit" ]
+            , H.button [ He.onClick (PressedSaveEdit todo.id todo.editText) ] [ H.text "Save edit" ]
             ]
 
     else
         H.li []
-            [ H.button [ He.onClick (PushedDeleteTodo todo.id) ] [ H.text "Delete" ]
+            [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
             , H.text todo.text
-            , H.button [ He.onClick (PushedEdit index) ] [ H.text "Edit" ]
+            , H.button [ He.onClick (PressedEdit index) ] [ H.text "Edit" ]
             ]
+
+
+sizedString : Bytes.Decode.Decoder String
+sizedString =
+    Bytes.Decode.unsignedInt32 Bytes.BE
+        |> Bytes.Decode.andThen Bytes.Decode.string
 
 
 httpDetailedErrorBytesToStr : Http.Detailed.Error Bytes.Bytes -> String
