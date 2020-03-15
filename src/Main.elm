@@ -25,7 +25,7 @@ main =
     Browser.element
         { init = init
         , update = update
-        , subscriptions = subscriptions
+        , subscriptions = \_ -> Sub.none
         , view = view
         }
 
@@ -57,11 +57,7 @@ type alias Todo =
 
 type alias Model =
     { nextText : String
-
-    -- Putting the last error as a field. If there's a network error I still want
-    -- to see the last version of the list (so don't put this as a Result in todos)
-    -- TODO: make this a Maybe String so I can put all errors here to display to the user
-    , lastError : Maybe (Http.Detailed.Error String)
+    , lastError : Maybe String
     , todos : Array.Array Todo
     }
 
@@ -123,39 +119,6 @@ sizedString =
         |> Bytes.Decode.andThen Bytes.Decode.string
 
 
-toHttpDetailedErrorString : Http.Detailed.Error Bytes.Bytes -> Maybe (Http.Detailed.Error String)
-toHttpDetailedErrorString err =
-    case err of
-        Http.Detailed.BadUrl s ->
-            Just <| Http.Detailed.BadUrl s
-
-        Http.Detailed.Timeout ->
-            Just Http.Detailed.Timeout
-
-        Http.Detailed.NetworkError ->
-            Just Http.Detailed.NetworkError
-
-        Http.Detailed.BadStatus metadata bodyBytes ->
-            let
-                errStr =
-                    Maybe.withDefault
-                        "Could not decode bytes"
-                        -- TODO: wish I knew how to decode bytes here
-                        (Bytes.Decode.decode sizedString bodyBytes)
-            in
-            Just <| Http.Detailed.BadStatus metadata errStr
-
-        Http.Detailed.BadBody metadata bodyBytes str ->
-            let
-                errStr =
-                    Maybe.withDefault
-                        "Could not decode bytes"
-                        -- TODO: wish I knew how to decode bytes here
-                        (Bytes.Decode.decode sizedString bodyBytes)
-            in
-            Just <| Http.Detailed.BadBody metadata errStr str
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -176,7 +139,7 @@ update msg model =
                     ( { model | todos = Array.push todo model.todos }, Cmd.none )
 
                 Err err ->
-                    ( { model | lastError = Just err }, Cmd.none )
+                    ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
         GotDeletedTodo id result ->
             case result of
@@ -186,7 +149,7 @@ update msg model =
                     )
 
                 Err err ->
-                    ( { model | lastError = toHttpDetailedErrorString err }, Cmd.none )
+                    ( { model | lastError = Just <| httpDetailedErrorBytesToStr err }, Cmd.none )
 
         GotTodos result ->
             case result of
@@ -194,7 +157,7 @@ update msg model =
                     ( { model | todos = Array.fromList todos }, Cmd.none )
 
                 Err err ->
-                    ( { model | lastError = Just err }, Cmd.none )
+                    ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
         GotSavedEdit result ->
             case result of
@@ -207,7 +170,7 @@ update msg model =
                             ( model, Cmd.none )
 
                 Err err ->
-                    ( { model | lastError = Just err }, Cmd.none )
+                    ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
         PushedAddButton t ->
             ( { model | nextText = "" }
@@ -291,14 +254,14 @@ view model =
         ]
 
 
-viewLastError : Maybe (Http.Detailed.Error String) -> H.Html Msg
-viewLastError maybeErr =
-    case maybeErr of
+viewLastError : Maybe String -> H.Html Msg
+viewLastError maybeErrStr =
+    case maybeErrStr of
         Nothing ->
             H.text "No HTTP errors found :)"
 
         Just err ->
-            H.text (httpDetailedErrorToStr err)
+            H.text err
 
 
 viewTodos : Array.Array Todo -> H.Html Msg
@@ -314,10 +277,6 @@ viewKeyedTodo ( index, todo ) =
     -- TODO: why is this working?
     -- https://guide.elm-lang.org/optimization/keyed.html
     ( "key", viewTodo ( index, todo ) )
-
-
-
--- TODO: why is this working?
 
 
 viewTodo : ( Index, Todo ) -> H.Html Msg
@@ -337,8 +296,41 @@ viewTodo ( index, todo ) =
             ]
 
 
-httpDetailedErrorToStr : Http.Detailed.Error String -> String
-httpDetailedErrorToStr err =
+httpDetailedErrorBytesToStr : Http.Detailed.Error Bytes.Bytes -> String
+httpDetailedErrorBytesToStr err =
+    let
+        start =
+            "Server Error: "
+    in
+    case err of
+        Http.Detailed.BadUrl str ->
+            start ++ "BadUrl: " ++ str
+
+        Http.Detailed.Timeout ->
+            start ++ "Timeout"
+
+        Http.Detailed.NetworkError ->
+            start ++ "NetworkError"
+
+        Http.Detailed.BadStatus metadata body ->
+            start
+                ++ "BadStatus: "
+                ++ metadata.statusText
+                ++ " : "
+                ++ Maybe.withDefault "Undecodable bytes" (Bytes.Decode.decode sizedString body)
+
+        Http.Detailed.BadBody metadata body str ->
+            start
+                ++ "BadBody: "
+                ++ metadata.statusText
+                ++ " : "
+                ++ Maybe.withDefault "Undecodable bytes" (Bytes.Decode.decode sizedString body)
+                ++ " : "
+                ++ str
+
+
+httpDetailedErrorStrToStr : Http.Detailed.Error String -> String
+httpDetailedErrorStrToStr err =
     let
         start =
             "Server Error: "
@@ -378,12 +370,3 @@ todoDecoder =
         -- editText
         (Jd.succeed "")
         (Jd.field "text" Jd.string)
-
-
-
--- SUBSCRIPTIONS
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
