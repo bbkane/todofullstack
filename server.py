@@ -17,8 +17,9 @@ try:
         for line in fp:
             # line = line.decode('utf-8')
             line = line.strip()
+            priority, text = line.split()
             if line:
-                g_state['todos'].append({'id': i, 'text': line})
+                g_state['todos'].append({'id': i, 'priority': int(priority), 'text': line})
             i = i + 1
 except FileNotFoundError:
     print('No tasks.txt to load')
@@ -55,7 +56,8 @@ def items():
     elif request.method == 'POST':
         json_body = request.json
         text = json_body['text']
-        new_item = {'id': len(g_state['todos']), 'text': text}
+        priority = int(json_body['priority'])
+        new_item = {'id': len(g_state['todos']),  'priority': priority, 'text': text}
         g_state['todos'].append(new_item)
         return jsonify(new_item)
     elif request.method == 'OPTIONS':
@@ -75,8 +77,12 @@ def item(task_id):
         return jsonify(g_state['todos'][task_id])
     elif request.method == 'PATCH':
         json_body = request.json
-        text = json_body['text']
-        g_state['todos'][task_id]['text'] = text
+        text = json_body.get('text')
+        if text:
+            g_state['todos'][task_id]['text'] = text
+        priority = json_body.get('priority')
+        if priority:
+            g_state['todos'][task_id]['priority'] = text
         # TODO: what's the right HTTP code for this?
         return jsonify(g_state['todos'][task_id])
     elif request.method == 'DELETE':

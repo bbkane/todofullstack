@@ -18,7 +18,7 @@ EOF
 
 set -x
 
-http --check-status POST "$origin/api/items" text='a thing'
+http --check-status POST "$origin/api/items" text='a thing' priority=1
 
 http --check-status GET "$origin/api/items/2"
 

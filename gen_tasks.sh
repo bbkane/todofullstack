@@ -11,4 +11,4 @@ IFS=$'\n\t'
 
 # https://stackoverflow.com/a/47501991/2958070
 
-base64 /dev/urandom | fold -w 10 | head -n 10000 > tasks.txt
+base64 /dev/urandom | fold -w 10 | head -n "$1" | nl -n ln
