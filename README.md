@@ -8,11 +8,9 @@ Run with ` npx elm-live src/Main.elm --open -- --debug`
 
 # TODO
 
-I've got keyed in there and it seems to be working, but it should be broken??? What is wrong??? - https://elmlang.slack.com/archives/C192T0Q1E/p1584290188196500
 
-User can only edit one thing at a time so use a shared editing instance to save memory (so we don't have 1000 elements and their usually empty edited copies)
+User can only edit one thing at a time so use a shared editing instance object in model to save memory (so we don't have 1000 elements and their usually empty edited copies)
 
-learn how to test...
 
 ## API
 

@@ -53,17 +53,25 @@ type alias Id =
     Int
 
 
+type alias TodoText =
+    String
+
+
+type alias ErrorText =
+    String
+
+
 type alias Todo =
     { id : Id
     , isEditing : Bool
-    , editText : String
-    , text : String
+    , editText : TodoText
+    , text : TodoText
     }
 
 
 type alias Model =
-    { nextText : String
-    , lastError : Maybe String
+    { nextText : TodoText
+    , lastError : Maybe ErrorText
     , todos : Array.Array Todo
     }
 
@@ -86,13 +94,16 @@ init _ =
 
 
 type Msg
-    = ChangedNextText String
-    | ChangedTodo Index String
-    | PressedAdd String
+    = -- Changes to inputs
+      ChangedNextText TodoText
+    | ChangedTodo Index TodoText
+      -- Buttons Pressed
+    | PressedAdd TodoText
     | PressedCancelEdit Index
     | PressedDelete Id
     | PressedEdit Index
-    | PressedSaveEdit Id String
+    | PressedSaveEdit Id TodoText
+      -- Server Results
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
     | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
     | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
@@ -254,7 +265,7 @@ view model =
         ]
 
 
-viewLastError : Maybe String -> H.Html Msg
+viewLastError : Maybe ErrorText -> H.Html Msg
 viewLastError maybeErrStr =
     case maybeErrStr of
         Nothing ->
@@ -301,7 +312,7 @@ sizedString =
         |> Bytes.Decode.andThen Bytes.Decode.string
 
 
-httpDetailedErrorBytesToStr : Http.Detailed.Error Bytes.Bytes -> String
+httpDetailedErrorBytesToStr : Http.Detailed.Error Bytes.Bytes -> ErrorText
 httpDetailedErrorBytesToStr err =
     let
         start =
@@ -334,7 +345,7 @@ httpDetailedErrorBytesToStr err =
                 ++ str
 
 
-httpDetailedErrorStrToStr : Http.Detailed.Error String -> String
+httpDetailedErrorStrToStr : Http.Detailed.Error String -> ErrorText
 httpDetailedErrorStrToStr err =
     let
         start =
