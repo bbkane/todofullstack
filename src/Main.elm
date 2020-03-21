@@ -67,10 +67,14 @@ type alias Todo =
     }
 
 
+type alias CurrentEdit =
+    Maybe { index : Index, text : TodoText }
+
+
 type alias Model =
     { nextText : TodoText
     , lastError : Maybe ErrorText
-    , currentEdit : Maybe { index : Index, text : TodoText }
+    , currentEdit : CurrentEdit
     , todos : Array.Array Todo
     }
 
@@ -231,7 +235,7 @@ update msg model =
 view : Model -> H.Html Msg
 view model =
     H.div []
-        [ H.input [ Ha.placeholder "buy avacodos", Ha.value model.nextText, He.onInput ChangedNextText ] []
+        [ H.input [ Ha.placeholder "buy avocados", Ha.value model.nextText, He.onInput ChangedNextText ] []
         , H.button [ He.onClick (PressedAdd model.nextText) ] [ H.text "Add" ]
         , H.br [] []
         , viewLastError model.lastError
@@ -242,34 +246,34 @@ view model =
 
 viewLastError : Maybe ErrorText -> H.Html Msg
 viewLastError maybeErrStr =
-    -- TODO: Maybe.withDefault here :)
-    case maybeErrStr of
-        Nothing ->
-            H.text "No errors found :)"
-
-        Just err ->
-            H.text err
+    H.text <| Maybe.withDefault "No errors found :)" maybeErrStr
 
 
-viewTodos : Maybe { index : Index, text : TodoText } -> Array.Array Todo -> H.Html Msg
+viewTodos : CurrentEdit -> Array.Array Todo -> H.Html Msg
 viewTodos currentEdit todos =
+    -- Cache list items by key
+    -- Curry argument here :) :D ;D
     Hk.ul [] (List.map (viewKeyedTodo currentEdit) (Array.toIndexedList todos))
 
 
-viewKeyedTodo : Maybe { index : Index, text : TodoText } -> ( Index, Todo ) -> ( String, H.Html Msg )
+viewKeyedTodo : CurrentEdit -> ( Index, Todo ) -> ( String, H.Html Msg )
 viewKeyedTodo currentEdit ( index, todo ) =
-    ( String.fromInt todo.id, viewTodo currentEdit ( index, todo ) )
+    ( String.fromInt todo.id, Hl.lazy2 viewTodo currentEdit ( index, todo ) )
 
 
-viewTodo : Maybe { index : Index, text : TodoText } -> ( Index, Todo ) -> H.Html Msg
+viewTodo : CurrentEdit -> ( Index, Todo ) -> H.Html Msg
 viewTodo currentEdit ( index, todo ) =
-    case currentEdit of
-        Nothing ->
+    let
+        notThisEdit =
             H.li []
                 [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
                 , H.text todo.text
                 , H.button [ He.onClick (PressedEdit index todo.text) ] [ H.text "Edit" ]
                 ]
+    in
+    case currentEdit of
+        Nothing ->
+            notThisEdit
 
         Just inner ->
             if inner.index == index then
@@ -280,11 +284,7 @@ viewTodo currentEdit ( index, todo ) =
                     ]
 
             else
-                H.li []
-                    [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
-                    , H.text todo.text
-                    , H.button [ He.onClick (PressedEdit index todo.text) ] [ H.text "Edit" ]
-                    ]
+                notThisEdit
 
 
 sizedString : Bytes.Decode.Decoder String
