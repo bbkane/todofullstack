@@ -63,8 +63,6 @@ type alias ErrorText =
 
 type alias Todo =
     { id : Id
-    , isEditing : Bool
-    , editText : TodoText
     , text : TodoText
     }
 
@@ -72,6 +70,7 @@ type alias Todo =
 type alias Model =
     { nextText : TodoText
     , lastError : Maybe ErrorText
+    , currentEdit : Maybe { index : Index, text : TodoText }
     , todos : Array.Array Todo
     }
 
@@ -80,6 +79,7 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     ( { nextText = ""
       , lastError = Nothing
+      , currentEdit = Nothing
       , todos = Array.empty
       }
     , Http.get
@@ -99,9 +99,9 @@ type Msg
     | ChangedTodo Index TodoText
       -- Buttons Pressed
     | PressedAdd TodoText
-    | PressedCancelEdit Index
+    | PressedCancelEdit
     | PressedDelete Id
-    | PressedEdit Index
+    | PressedEdit Index TodoText
     | PressedSaveEdit Id TodoText
       -- Server Results
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
@@ -137,12 +137,7 @@ update msg model =
             ( { model | nextText = t }, Cmd.none )
 
         ChangedTodo index newEditText ->
-            case Array.get index model.todos of
-                Just todo ->
-                    ( { model | todos = Array.set index { todo | editText = newEditText } model.todos }, Cmd.none )
-
-                Nothing ->
-                    ( model, Cmd.none )
+            ( { model | currentEdit = Just { index = index, text = newEditText } }, Cmd.none )
 
         GotAddedNextText result ->
             case result of
@@ -175,7 +170,7 @@ update msg model =
                 Ok ( _, todo ) ->
                     case findIndex (\i -> i.id == todo.id) model.todos of
                         Just index ->
-                            ( { model | todos = Array.set index todo model.todos }, Cmd.none )
+                            ( { model | todos = Array.set index todo model.todos, currentEdit = Nothing }, Cmd.none )
 
                         Nothing ->
                             ( model, Cmd.none )
@@ -196,15 +191,8 @@ update msg model =
                 }
             )
 
-        PressedCancelEdit index ->
-            case Array.get index model.todos of
-                Just todo ->
-                    ( { model | todos = Array.set index { todo | isEditing = False } model.todos }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
+        PressedCancelEdit ->
+            ( { model | currentEdit = Nothing }, Cmd.none )
 
         PressedDelete id ->
             ( model
@@ -219,21 +207,8 @@ update msg model =
                 }
             )
 
-        PressedEdit index ->
-            case Array.get index model.todos of
-                Just todo ->
-                    ( { model
-                        | todos =
-                            Array.set
-                                index
-                                { todo | isEditing = True, editText = todo.text }
-                                model.todos
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
+        PressedEdit index editText ->
+            ( { model | currentEdit = Just { index = index, text = editText } }, Cmd.none )
 
         PressedSaveEdit id newText ->
             ( model
@@ -261,12 +236,13 @@ view model =
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
-        , Hl.lazy viewTodos model.todos
+        , Hl.lazy2 viewTodos model.currentEdit model.todos
         ]
 
 
 viewLastError : Maybe ErrorText -> H.Html Msg
 viewLastError maybeErrStr =
+    -- TODO: Maybe.withDefault here :)
     case maybeErrStr of
         Nothing ->
             H.text "No errors found :)"
@@ -275,35 +251,40 @@ viewLastError maybeErrStr =
             H.text err
 
 
-viewTodos : Array.Array Todo -> H.Html Msg
-viewTodos todos =
-    Hk.ul [] (List.map viewKeyedTodo (Array.toIndexedList todos))
+viewTodos : Maybe { index : Index, text : TodoText } -> Array.Array Todo -> H.Html Msg
+viewTodos currentEdit todos =
+    Hk.ul [] (List.map (viewKeyedTodo currentEdit) (Array.toIndexedList todos))
 
 
-viewKeyedTodo : ( Index, Todo ) -> ( String, H.Html Msg )
-viewKeyedTodo ( index, todo ) =
-    -- TODO: why is this working?
-    -- https://guide.elm-lang.org/optimization/keyed.html
-    -- I'm assuming that if it finds duplicate keys it falls back to comparing equality
-    -- ( "key", viewTodo ( index, todo ) )
-    ( String.fromInt todo.id, viewTodo ( index, todo ) )
+viewKeyedTodo : Maybe { index : Index, text : TodoText } -> ( Index, Todo ) -> ( String, H.Html Msg )
+viewKeyedTodo currentEdit ( index, todo ) =
+    ( String.fromInt todo.id, viewTodo currentEdit ( index, todo ) )
 
 
-viewTodo : ( Index, Todo ) -> H.Html Msg
-viewTodo ( index, todo ) =
-    if todo.isEditing then
-        H.li []
-            [ H.button [ He.onClick (PressedCancelEdit index) ] [ H.text "Cancel Edit" ]
-            , H.input [ Ha.placeholder "buy avacodos", Ha.value todo.editText, He.onInput (ChangedTodo index) ] []
-            , H.button [ He.onClick (PressedSaveEdit todo.id todo.editText) ] [ H.text "Save edit" ]
-            ]
+viewTodo : Maybe { index : Index, text : TodoText } -> ( Index, Todo ) -> H.Html Msg
+viewTodo currentEdit ( index, todo ) =
+    case currentEdit of
+        Nothing ->
+            H.li []
+                [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
+                , H.text todo.text
+                , H.button [ He.onClick (PressedEdit index todo.text) ] [ H.text "Edit" ]
+                ]
 
-    else
-        H.li []
-            [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
-            , H.text todo.text
-            , H.button [ He.onClick (PressedEdit index) ] [ H.text "Edit" ]
-            ]
+        Just inner ->
+            if inner.index == index then
+                H.li []
+                    [ H.button [ He.onClick PressedCancelEdit ] [ H.text "Cancel Edit" ]
+                    , H.input [ Ha.placeholder "buy avacodos", Ha.value inner.text, He.onInput (ChangedTodo index) ] []
+                    , H.button [ He.onClick (PressedSaveEdit todo.id inner.text) ] [ H.text "Save edit" ]
+                    ]
+
+            else
+                H.li []
+                    [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
+                    , H.text todo.text
+                    , H.button [ He.onClick (PressedEdit index todo.text) ] [ H.text "Edit" ]
+                    ]
 
 
 sizedString : Bytes.Decode.Decoder String
@@ -379,10 +360,6 @@ todosDecoder =
 
 todoDecoder : Jd.Decoder Todo
 todoDecoder =
-    Jd.map4 Todo
+    Jd.map2 Todo
         (Jd.field "id" Jd.int)
-        -- isEditing
-        (Jd.succeed False)
-        -- editText
-        (Jd.succeed "")
         (Jd.field "text" Jd.string)
