@@ -53,35 +53,61 @@ type alias Id =
     Int
 
 
-type alias TodoText =
-    String
-
-
 type alias ErrorText =
     String
 
 
-type alias Todo =
+type alias TodoText =
+    String
+
+
+type alias TodoExtensible r =
+    { r | text : TodoText }
+
+
+emptyTodoExtensible : TodoExtensible r -> TodoExtensible r
+emptyTodoExtensible todo =
+    { todo | text = "" }
+
+
+type UpdatedTodo
+    = ChangedText TodoText
+
+
+updateTodoExtensible : UpdatedTodo -> TodoExtensible r -> TodoExtensible r
+updateTodoExtensible msg todo =
+    case msg of
+        ChangedText newText ->
+            { todo | text = newText }
+
+
+{-| Embed me in the model
+-}
+type alias TodoToAdd =
+    { text : TodoText }
+
+
+type alias TodoFromServer =
     { id : Id
     , text : TodoText
     }
 
 
-type alias CurrentEdit =
-    Maybe { index : Index, text : TodoText }
+type alias TodoToEdit =
+    { id : Id, index : Index, text : TodoText }
 
 
 type alias Model =
-    { nextText : TodoText
+    { text : TodoText
     , lastError : Maybe ErrorText
-    , currentEdit : CurrentEdit
-    , todos : Array.Array Todo
+    , currentEdit : Maybe TodoToEdit
+    , todos : Array.Array TodoFromServer
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { nextText = ""
+    ( { text = ""
       , lastError = Nothing
       , currentEdit = Nothing
       , todos = Array.empty
@@ -99,19 +125,19 @@ init _ =
 
 type Msg
     = -- Changes to inputs
-      ChangedNextText TodoText
-    | ChangedTodo Index TodoText
+      ChangedTodoToAdd UpdatedTodo
+    | ChangedTodoToEdit UpdatedTodo
       -- Buttons Pressed
-    | PressedAdd TodoText
+    | PressedAdd TodoToAdd
     | PressedCancelEdit
     | PressedDelete Id
-    | PressedEdit Index TodoText
-    | PressedSaveEdit Id TodoText
+    | PressedEdit TodoToEdit
+    | PressedSaveEdit TodoToEdit
       -- Server Results
-    | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
+    | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, TodoFromServer ))
     | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
-    | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, Todo ))
-    | GotTodos (Result (Http.Detailed.Error String) ( Http.Metadata, List Todo ))
+    | GotSavedEdit (Result (Http.Detailed.Error String) ( Http.Metadata, TodoFromServer ))
+    | GotTodos (Result (Http.Detailed.Error String) ( Http.Metadata, List TodoFromServer ))
 
 
 {-| for item in array: if test(item): return Just index of item else Nothing
@@ -137,11 +163,17 @@ findIndexHelper index predicate array =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ChangedNextText t ->
-            ( { model | nextText = t }, Cmd.none )
+        ChangedTodoToAdd updateMsg ->
+            ( updateTodoExtensible updateMsg model, Cmd.none )
 
-        ChangedTodo index newEditText ->
-            ( { model | currentEdit = Just { index = index, text = newEditText } }, Cmd.none )
+        ChangedTodoToEdit updateMsg ->
+            let
+                newEdit =
+                    model.currentEdit
+                        |> Maybe.andThen
+                            (\todoToEdit -> Just <| updateTodoExtensible updateMsg todoToEdit)
+            in
+            ( { model | currentEdit = newEdit }, Cmd.none )
 
         GotAddedNextText result ->
             case result of
@@ -182,13 +214,13 @@ update msg model =
                 Err err ->
                     ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
-        PressedAdd t ->
-            ( { model | nextText = "" }
+        PressedAdd todoToAdd ->
+            ( emptyTodoExtensible model
             , Http.request
                 { method = "POST"
                 , headers = []
                 , url = origin ++ "/api/items"
-                , body = Http.jsonBody (Je.object [ ( "text", Je.string t ) ])
+                , body = Http.jsonBody (Je.object [ ( "text", Je.string todoToAdd.text ) ])
                 , expect = Http.Detailed.expectJson GotAddedNextText todoDecoder
                 , timeout = Nothing
                 , tracker = Nothing
@@ -211,16 +243,16 @@ update msg model =
                 }
             )
 
-        PressedEdit index editText ->
-            ( { model | currentEdit = Just { index = index, text = editText } }, Cmd.none )
+        PressedEdit todoToEdit ->
+            ( { model | currentEdit = Just todoToEdit }, Cmd.none )
 
-        PressedSaveEdit id newText ->
+        PressedSaveEdit todoFromServer ->
             ( model
             , Http.request
                 { method = "PATCH"
                 , headers = []
-                , url = origin ++ "/api/items/" ++ String.fromInt id
-                , body = Http.jsonBody (Je.object [ ( "text", Je.string newText ) ])
+                , url = origin ++ "/api/items/" ++ String.fromInt todoFromServer.id
+                , body = Http.jsonBody (Je.object [ ( "text", Je.string todoFromServer.text ) ])
                 , expect = Http.Detailed.expectJson GotSavedEdit todoDecoder
                 , timeout = Nothing
                 , tracker = Nothing
@@ -235,8 +267,8 @@ update msg model =
 view : Model -> H.Html Msg
 view model =
     H.div []
-        [ H.input [ Ha.placeholder "buy avocados", Ha.value model.nextText, He.onInput ChangedNextText ] []
-        , H.button [ He.onClick (PressedAdd model.nextText) ] [ H.text "Add" ]
+        [ H.input [ Ha.placeholder "buy avocados", Ha.value model.text, He.onInput (ChangedTodoToAdd << ChangedText) ] []
+        , H.button [ He.onClick (PressedAdd { text = model.text }) ] [ H.text "Add" ]
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
@@ -249,42 +281,46 @@ viewLastError maybeErrStr =
     H.text <| Maybe.withDefault "No errors found :)" maybeErrStr
 
 
-viewTodos : CurrentEdit -> Array.Array Todo -> H.Html Msg
+viewTodos : Maybe TodoToEdit -> Array.Array TodoFromServer -> H.Html Msg
 viewTodos currentEdit todos =
     -- Cache list items by key
     -- Curry argument here :) :D ;D
     Hk.ul [] (List.map (viewKeyedTodo currentEdit) (Array.toIndexedList todos))
 
 
-viewKeyedTodo : CurrentEdit -> ( Index, Todo ) -> ( String, H.Html Msg )
+viewKeyedTodo : Maybe TodoToEdit -> ( Index, TodoFromServer ) -> ( String, H.Html Msg )
 viewKeyedTodo currentEdit ( index, todo ) =
     ( String.fromInt todo.id, Hl.lazy2 viewTodo currentEdit ( index, todo ) )
 
 
-viewTodo : CurrentEdit -> ( Index, Todo ) -> H.Html Msg
+viewTodo : Maybe TodoToEdit -> ( Index, TodoFromServer ) -> H.Html Msg
 viewTodo currentEdit ( index, todo ) =
     let
-        notThisEdit =
+        notEditingNow =
             H.li []
                 [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
                 , H.text todo.text
-                , H.button [ He.onClick (PressedEdit index todo.text) ] [ H.text "Edit" ]
+                , H.button [ He.onClick (PressedEdit { id = todo.id, index = index, text = todo.text }) ] [ H.text "Edit" ]
                 ]
     in
     case currentEdit of
         Nothing ->
-            notThisEdit
+            notEditingNow
 
         Just inner ->
             if inner.index == index then
                 H.li []
                     [ H.button [ He.onClick PressedCancelEdit ] [ H.text "Cancel Edit" ]
-                    , H.input [ Ha.placeholder "buy avacodos", Ha.value inner.text, He.onInput (ChangedTodo index) ] []
-                    , H.button [ He.onClick (PressedSaveEdit todo.id inner.text) ] [ H.text "Save edit" ]
+                    , H.input
+                        [ Ha.placeholder "buy avocados", Ha.value inner.text, He.onInput (ChangedTodoToEdit << ChangedText) ]
+                        []
+                    , H.button
+                        [ He.onClick (PressedSaveEdit { index = index, id = todo.id, text = inner.text }) ]
+                        [ H.text "Save edit" ]
                     ]
 
             else
-                notThisEdit
+                notEditingNow
 
 
 sizedString : Bytes.Decode.Decoder String
@@ -353,13 +389,13 @@ httpDetailedErrorStrToStr err =
 -- HTTP
 
 
-todosDecoder : Jd.Decoder (List Todo)
+todosDecoder : Jd.Decoder (List TodoFromServer)
 todosDecoder =
     Jd.field "todos" (Jd.list todoDecoder)
 
 
-todoDecoder : Jd.Decoder Todo
+todoDecoder : Jd.Decoder TodoFromServer
 todoDecoder =
-    Jd.map2 Todo
+    Jd.map2 TodoFromServer
         (Jd.field "id" Jd.int)
         (Jd.field "text" Jd.string)
