@@ -69,37 +69,64 @@ type alias PriorityText =
     String
 
 
-type alias TodoExtensible r =
+type alias TodoInputExtensible r =
     { r
-        | priority : Priority
+        | -- Gonna use this for input validation errors and server errors on submit
+          -- I think that might be the right abstraction
+          lastError : Maybe ErrorText
+        , priorityText : PriorityText
         , text : TodoText
     }
 
 
-emptyTodoExtensible : TodoExtensible r -> TodoExtensible r
-emptyTodoExtensible todo =
-    { todo | priority = 0, text = "" }
+emptyTodoInputExtensible : TodoInputExtensible r -> TodoInputExtensible r
+emptyTodoInputExtensible todo =
+    { todo
+        | lastError = Nothing
+        , priorityText = ""
+        , text = ""
+    }
 
 
-type UpdatedTodo
-    = ChangedPriority Priority
+type UpdatedTodoInput
+    = ChangedPriorityText PriorityText
     | ChangedText TodoText
+    | ChangedLastError (Maybe ErrorText)
 
 
-updateTodoExtensible : UpdatedTodo -> TodoExtensible r -> TodoExtensible r
-updateTodoExtensible msg todo =
+updateTodoInputExtensible : UpdatedTodoInput -> TodoInputExtensible r -> TodoInputExtensible r
+updateTodoInputExtensible msg todo =
     case msg of
-        ChangedPriority newPriority ->
-            { todo | priority = newPriority }
+        -- TODO: make this do validation on each keypress?
+        ChangedPriorityText newPriorityText ->
+            { todo | priorityText = newPriorityText }
 
         ChangedText newText ->
             { todo | text = newText }
 
+        ChangedLastError newLastError ->
+            { todo | lastError = newLastError }
+
 
 {-| Embed me in the model
+Note: not sure if this is needed. Can I pass TodoInputExtensible instead?
 -}
 type alias TodoToAdd =
-    { priority : Priority, text : TodoText }
+    { priorityText : PriorityText, text : TodoText, lastError : Maybe ErrorText }
+
+
+todoToAddToJson : TodoToAdd -> Result ErrorText Je.Value
+todoToAddToJson todoToAdd =
+    case String.toInt todoToAdd.priorityText of
+        Nothing ->
+            Err ("Cannot convert " ++ todoToAdd.priorityText ++ " to Int")
+
+        Just priority ->
+            Ok <|
+                Je.object
+                    [ ( "priority", Je.int priority )
+                    , ( "text", Je.string todoToAdd.text )
+                    ]
 
 
 type alias TodoFromServer =
@@ -110,11 +137,32 @@ type alias TodoFromServer =
 
 
 type alias TodoToEdit =
-    { id : Id, index : Index, priority : Priority, text : TodoText }
+    { id : Id
+    , index : Index
+    , lastError : Maybe ErrorText
+    , priorityText : PriorityText
+    , text : TodoText
+    }
+
+
+todoToEditToJson : TodoToEdit -> Result ErrorText Je.Value
+todoToEditToJson todoToEdit =
+    -- NOTE: this turns out to be the same as todoToAddToJson, but I'm not sure if that will be true in the future
+    -- I'd rather not abstract too early...
+    case String.toInt todoToEdit.priorityText of
+        Nothing ->
+            Err ("Cannot convert " ++ todoToEdit.priorityText ++ " to Int")
+
+        Just priority ->
+            Ok <|
+                Je.object
+                    [ ( "priority", Je.int priority )
+                    , ( "text", Je.string todoToEdit.text )
+                    ]
 
 
 type alias Model =
-    { priority : Priority
+    { priorityText : PriorityText
     , text : TodoText
     , lastError : Maybe ErrorText
     , currentEdit : Maybe TodoToEdit
@@ -124,7 +172,8 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { priority = 0
+    -- TODO: use an input box for this :)
+    ( { priorityText = "1"
       , text = ""
       , lastError = Nothing
       , currentEdit = Nothing
@@ -143,14 +192,14 @@ init _ =
 
 type Msg
     = -- Changes to inputs
-      ChangedTodoToAdd UpdatedTodo
-    | ChangedTodoToEdit UpdatedTodo
+      ChangedTodoToAdd UpdatedTodoInput
+    | ChangedTodoToEdit UpdatedTodoInput
       -- Buttons Pressed
     | PressedAdd TodoToAdd
     | PressedCancelEdit
     | PressedDelete Id
-    | PressedEdit TodoToEdit
-    | PressedSaveEdit TodoFromServer
+    | PressedEdit Index TodoFromServer
+    | PressedSaveEdit TodoToEdit
       -- Server Results
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, TodoFromServer ))
     | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
@@ -182,14 +231,14 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         ChangedTodoToAdd updateMsg ->
-            ( updateTodoExtensible updateMsg model, Cmd.none )
+            ( updateTodoInputExtensible updateMsg model, Cmd.none )
 
         ChangedTodoToEdit updateMsg ->
             let
                 newEdit =
                     model.currentEdit
                         |> Maybe.andThen
-                            (\todoToEdit -> Just <| updateTodoExtensible updateMsg todoToEdit)
+                            (\todoToEdit -> Just <| updateTodoInputExtensible updateMsg todoToEdit)
             in
             ( { model | currentEdit = newEdit }, Cmd.none )
 
@@ -233,23 +282,25 @@ update msg model =
                     ( { model | lastError = Just <| httpDetailedErrorStrToStr err }, Cmd.none )
 
         PressedAdd todoToAdd ->
-            ( emptyTodoExtensible model
-            , Http.request
-                { method = "POST"
-                , headers = []
-                , url = origin ++ "/api/items"
-                , body =
-                    Http.jsonBody
-                        (Je.object
-                            [ ( "priority", Je.int todoToAdd.priority )
-                            , ( "text", Je.string todoToAdd.text )
-                            ]
-                        )
-                , expect = Http.Detailed.expectJson GotAddedNextText todoDecoder
-                , timeout = Nothing
-                , tracker = Nothing
-                }
-            )
+            case todoToAddToJson todoToAdd of
+                Ok jsonValue ->
+                    -- TODO: empty on successfull HTTP result, not when submitting
+                    ( emptyTodoInputExtensible model
+                    , Http.request
+                        { method = "POST"
+                        , headers = []
+                        , url = origin ++ "/api/items"
+                        , body =
+                            Http.jsonBody
+                                jsonValue
+                        , expect = Http.Detailed.expectJson GotAddedNextText todoDecoder
+                        , timeout = Nothing
+                        , tracker = Nothing
+                        }
+                    )
+
+                Err errorText ->
+                    ( updateTodoInputExtensible (ChangedLastError (Just errorText)) model, Cmd.none )
 
         PressedCancelEdit ->
             ( { model | currentEdit = Nothing }, Cmd.none )
@@ -267,27 +318,42 @@ update msg model =
                 }
             )
 
-        PressedEdit todoToEdit ->
-            ( { model | currentEdit = Just todoToEdit }, Cmd.none )
-
-        PressedSaveEdit todoFromServer ->
-            ( model
-            , Http.request
-                { method = "PATCH"
-                , headers = []
-                , url = origin ++ "/api/items/" ++ String.fromInt todoFromServer.id
-                , body =
-                    Http.jsonBody
-                        (Je.object
-                            [ ( "priority", Je.int todoFromServer.priority )
-                            , ( "text", Je.string todoFromServer.text )
-                            ]
-                        )
-                , expect = Http.Detailed.expectJson GotSavedEdit todoDecoder
-                , timeout = Nothing
-                , tracker = Nothing
-                }
+        PressedEdit index todoFromServer ->
+            ( { model
+                | currentEdit =
+                    Just
+                        { id = todoFromServer.id
+                        , index = index
+                        , priorityText = String.fromInt todoFromServer.priority
+                        , text = todoFromServer.text
+                        , lastError = Nothing
+                        }
+              }
+            , Cmd.none
             )
+
+        PressedSaveEdit todoToEdit ->
+            case todoToEditToJson todoToEdit of
+                Ok jsonValue ->
+                    ( model
+                    , Http.request
+                        { method = "PATCH"
+                        , headers = []
+                        , url = origin ++ "/api/items/" ++ String.fromInt todoToEdit.id
+                        , body = Http.jsonBody jsonValue
+                        , expect = Http.Detailed.expectJson GotSavedEdit todoDecoder
+                        , timeout = Nothing
+                        , tracker = Nothing
+                        }
+                    )
+
+                Err errorText ->
+                    case model.currentEdit of
+                        Just currentEdit ->
+                            ( { model | currentEdit = Just { currentEdit | lastError = Just errorText } }, Cmd.none )
+
+                        Nothing ->
+                            ( model, Cmd.none )
 
 
 
@@ -297,8 +363,9 @@ update msg model =
 view : Model -> H.Html Msg
 view model =
     H.div []
-        [ H.input [ Ha.placeholder "buy avocados", Ha.value model.text, He.onInput (ChangedTodoToAdd << ChangedText) ] []
-        , H.button [ He.onClick (PressedAdd { priority = model.priority, text = model.text }) ] [ H.text "Add" ]
+        [ H.input [ Ha.placeholder "0", Ha.value model.priorityText, He.onInput (ChangedTodoToAdd << ChangedPriorityText) ] []
+        , H.input [ Ha.placeholder "buy avocados", Ha.value model.text, He.onInput (ChangedTodoToAdd << ChangedText) ] []
+        , H.button [ He.onClick (PressedAdd { priorityText = model.priorityText, text = model.text, lastError = Nothing }) ] [ H.text "Add" ]
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
@@ -331,9 +398,7 @@ viewTodo currentEdit ( index, todo ) =
                 [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
                 , H.text todo.text
                 , H.button
-                    [ He.onClick
-                        (PressedEdit { id = todo.id, index = index, priority = todo.priority, text = todo.text })
-                    ]
+                    [ He.onClick (PressedEdit index todo) ]
                     [ H.text "Edit" ]
                 ]
     in
@@ -341,22 +406,23 @@ viewTodo currentEdit ( index, todo ) =
         Nothing ->
             notEditingNow
 
-        Just inner ->
-            if inner.index == index then
+        Just todoToEdit ->
+            if todoToEdit.index == index then
                 H.li []
                     [ H.button [ He.onClick PressedCancelEdit ] [ H.text "Cancel Edit" ]
                     , H.input
                         [ Ha.placeholder "0"
-                        , Ha.value (String.fromInt inner.priority)
-                        , He.onInput (ChangedTodoToEdit << ChangedPriority << (\t -> Maybe.withDefault 0 (String.toInt t)))
+                        , Ha.value todoToEdit.priorityText
+                        , He.onInput (ChangedTodoToEdit << ChangedPriorityText)
                         ]
                         []
                     , H.input
-                        [ Ha.placeholder "buy avocados", Ha.value inner.text, He.onInput (ChangedTodoToEdit << ChangedText) ]
+                        [ Ha.placeholder "buy avocados", Ha.value todoToEdit.text, He.onInput (ChangedTodoToEdit << ChangedText) ]
                         []
                     , H.button
-                        [ He.onClick (PressedSaveEdit { id = todo.id, priority = todo.priority, text = inner.text }) ]
+                        [ He.onClick (PressedSaveEdit todoToEdit) ]
                         [ H.text "Save edit" ]
+                    , viewLastError todoToEdit.lastError
                     ]
 
             else

@@ -81,8 +81,8 @@ def item(task_id):
         if text:
             g_state['todos'][task_id]['text'] = text
         priority = json_body.get('priority')
-        if priority:
-            g_state['todos'][task_id]['priority'] = text
+        if priority is not None:  # can == 0
+            g_state['todos'][task_id]['priority'] = priority
         # TODO: what's the right HTTP code for this?
         return jsonify(g_state['todos'][task_id])
     elif request.method == 'DELETE':

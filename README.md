@@ -8,9 +8,7 @@ Run with ` npx elm-live src/Main.elm --open -- --debug`
 
 # TODO
 
-
-User can only edit one thing at a time so use a shared editing instance object in model to save memory (so we don't have 1000 elements and their usually empty edited copies)
-
+- Clean up TODOs - need a validation function before I convert to HTTP request
 
 ## API
 
