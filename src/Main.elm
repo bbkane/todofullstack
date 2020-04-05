@@ -57,26 +57,41 @@ type alias ErrorText =
     String
 
 
+type alias Priority =
+    Int
+
+
 type alias TodoText =
     String
 
 
+type alias PriorityText =
+    String
+
+
 type alias TodoExtensible r =
-    { r | text : TodoText }
+    { r
+        | priority : Priority
+        , text : TodoText
+    }
 
 
 emptyTodoExtensible : TodoExtensible r -> TodoExtensible r
 emptyTodoExtensible todo =
-    { todo | text = "" }
+    { todo | priority = 0, text = "" }
 
 
 type UpdatedTodo
-    = ChangedText TodoText
+    = ChangedPriority Priority
+    | ChangedText TodoText
 
 
 updateTodoExtensible : UpdatedTodo -> TodoExtensible r -> TodoExtensible r
 updateTodoExtensible msg todo =
     case msg of
+        ChangedPriority newPriority ->
+            { todo | priority = newPriority }
+
         ChangedText newText ->
             { todo | text = newText }
 
@@ -84,21 +99,23 @@ updateTodoExtensible msg todo =
 {-| Embed me in the model
 -}
 type alias TodoToAdd =
-    { text : TodoText }
+    { priority : Priority, text : TodoText }
 
 
 type alias TodoFromServer =
     { id : Id
+    , priority : Priority
     , text : TodoText
     }
 
 
 type alias TodoToEdit =
-    { id : Id, index : Index, text : TodoText }
+    { id : Id, index : Index, priority : Priority, text : TodoText }
 
 
 type alias Model =
-    { text : TodoText
+    { priority : Priority
+    , text : TodoText
     , lastError : Maybe ErrorText
     , currentEdit : Maybe TodoToEdit
     , todos : Array.Array TodoFromServer
@@ -107,7 +124,8 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { text = ""
+    ( { priority = 0
+      , text = ""
       , lastError = Nothing
       , currentEdit = Nothing
       , todos = Array.empty
@@ -132,7 +150,7 @@ type Msg
     | PressedCancelEdit
     | PressedDelete Id
     | PressedEdit TodoToEdit
-    | PressedSaveEdit TodoToEdit
+    | PressedSaveEdit TodoFromServer
       -- Server Results
     | GotAddedNextText (Result (Http.Detailed.Error String) ( Http.Metadata, TodoFromServer ))
     | GotDeletedTodo Id (Result (Http.Detailed.Error Bytes.Bytes) ())
@@ -220,7 +238,13 @@ update msg model =
                 { method = "POST"
                 , headers = []
                 , url = origin ++ "/api/items"
-                , body = Http.jsonBody (Je.object [ ( "text", Je.string todoToAdd.text ) ])
+                , body =
+                    Http.jsonBody
+                        (Je.object
+                            [ ( "priority", Je.int todoToAdd.priority )
+                            , ( "text", Je.string todoToAdd.text )
+                            ]
+                        )
                 , expect = Http.Detailed.expectJson GotAddedNextText todoDecoder
                 , timeout = Nothing
                 , tracker = Nothing
@@ -252,7 +276,13 @@ update msg model =
                 { method = "PATCH"
                 , headers = []
                 , url = origin ++ "/api/items/" ++ String.fromInt todoFromServer.id
-                , body = Http.jsonBody (Je.object [ ( "text", Je.string todoFromServer.text ) ])
+                , body =
+                    Http.jsonBody
+                        (Je.object
+                            [ ( "priority", Je.int todoFromServer.priority )
+                            , ( "text", Je.string todoFromServer.text )
+                            ]
+                        )
                 , expect = Http.Detailed.expectJson GotSavedEdit todoDecoder
                 , timeout = Nothing
                 , tracker = Nothing
@@ -268,7 +298,7 @@ view : Model -> H.Html Msg
 view model =
     H.div []
         [ H.input [ Ha.placeholder "buy avocados", Ha.value model.text, He.onInput (ChangedTodoToAdd << ChangedText) ] []
-        , H.button [ He.onClick (PressedAdd { text = model.text }) ] [ H.text "Add" ]
+        , H.button [ He.onClick (PressedAdd { priority = model.priority, text = model.text }) ] [ H.text "Add" ]
         , H.br [] []
         , viewLastError model.lastError
         , H.br [] []
@@ -300,7 +330,11 @@ viewTodo currentEdit ( index, todo ) =
             H.li []
                 [ H.button [ He.onClick (PressedDelete todo.id) ] [ H.text "Delete" ]
                 , H.text todo.text
-                , H.button [ He.onClick (PressedEdit { id = todo.id, index = index, text = todo.text }) ] [ H.text "Edit" ]
+                , H.button
+                    [ He.onClick
+                        (PressedEdit { id = todo.id, index = index, priority = todo.priority, text = todo.text })
+                    ]
+                    [ H.text "Edit" ]
                 ]
     in
     case currentEdit of
@@ -312,10 +346,16 @@ viewTodo currentEdit ( index, todo ) =
                 H.li []
                     [ H.button [ He.onClick PressedCancelEdit ] [ H.text "Cancel Edit" ]
                     , H.input
+                        [ Ha.placeholder "0"
+                        , Ha.value (String.fromInt inner.priority)
+                        , He.onInput (ChangedTodoToEdit << ChangedPriority << (\t -> Maybe.withDefault 0 (String.toInt t)))
+                        ]
+                        []
+                    , H.input
                         [ Ha.placeholder "buy avocados", Ha.value inner.text, He.onInput (ChangedTodoToEdit << ChangedText) ]
                         []
                     , H.button
-                        [ He.onClick (PressedSaveEdit { index = index, id = todo.id, text = inner.text }) ]
+                        [ He.onClick (PressedSaveEdit { id = todo.id, priority = todo.priority, text = inner.text }) ]
                         [ H.text "Save edit" ]
                     ]
 
@@ -396,6 +436,7 @@ todosDecoder =
 
 todoDecoder : Jd.Decoder TodoFromServer
 todoDecoder =
-    Jd.map2 TodoFromServer
+    Jd.map3 TodoFromServer
         (Jd.field "id" Jd.int)
+        (Jd.field "priority" Jd.int)
         (Jd.field "text" Jd.string)
